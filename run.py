@@ -84,6 +84,7 @@ class Node:
     # tunnels and VMs can be spread differently.
     teams: List[int] = field(default_factory=list)
     vm_teams: List[int] = field(default_factory=list)
+    key_file: str = ""
 
     def has_role(self, role: str) -> bool:
         return role in self.roles
@@ -1667,17 +1668,24 @@ def node_compose(config: Config, node: Node, compose_args: str) -> bool:
         composecmd(compose_args, compose_path, project=project)
         return True
     remote = f"cd {node.path} && docker compose -p {project} -f {compose_path} {compose_args}"
-    return run_cmd(f"ssh {ssh_target(node)} {json.dumps(remote)}")
+    return run_cmd(f"ssh {ssh_target(node)} {'-i ' + node.key_file if node.key_file else ''} {json.dumps(remote)}")
 
 
 def ssh_capture(node: Node, remote_cmd: str) -> Optional[str]:
     """Runs a command on a node and returns its output, or None if it failed."""
+    cmd = ["ssh", ssh_target(node)]
+    if node.key_file:
+        cmd += ["-i", node.key_file]
+    cmd.append(remote_cmd)
     result = subprocess.run(
-        ["ssh", ssh_target(node), remote_cmd],
+        cmd,
         capture_output=True,
         text=True,
     )
     if result.returncode != 0:
+        puts(f"Command '{cmd}' produced {result.stdout} - {result.stderr}.",
+            color=colors.red,
+            is_bold=True,)
         return None
     return result.stdout.strip()
 
@@ -1731,8 +1739,12 @@ def ensure_remote_rsync(node: Node) -> bool:
     if ssh_capture(node, f"docker image inspect {RSYNC_IMAGE} >/dev/null 2>&1 && echo ok"):
         return True
     puts(f"  building the rsync helper image on {node.name}", color=colors.yellow)
+    cmd = ["ssh", ssh_target(node)]
+    if node.key_file:
+        cmd += ["-i", node.key_file]
+    cmd.append(f"docker build -q -t {RSYNC_IMAGE} -")
     result = subprocess.run(
-        ["ssh", ssh_target(node), f"docker build -q -t {RSYNC_IMAGE} -"],
+        cmd,
         input=RSYNC_DOCKERFILE,
         text=True,
         capture_output=True,
@@ -1802,6 +1814,8 @@ def node_sync(config: Config, node: Node) -> bool:
 
     rsync_path = remote_rsync_path(node, remote_root, remote_user)
     rsync_opts = f"-az --rsync-path={shlex.quote(rsync_path)}"
+    if node.key_file:
+        rsync_opts += f" -e 'ssh -i {node.key_file}'"
 
     def push(source: str, destination: str, extra: str = "") -> bool:
         return run_cmd(

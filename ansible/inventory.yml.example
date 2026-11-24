@@ -1,0 +1,17 @@
+all:
+  children:
+    vulnbox:
+      hosts:
+        vulnbox1:
+          ansible_host: 192.168.2.5 # private ip of the vulnbox
+          ansible_ssh_private_key_file: ./vul1.pem # private key to connect to the vulnbox
+          ansible_user: ubuntu
+        vulnbox2:
+          ansible_host: 192.168.2.4 # private ip of the vulnbox
+          ansible_ssh_private_key_file: ./vul2.pem # private key to connect to the vulnbox
+          ansible_user: ubuntu
+  hosts:
+    server:
+      ansible_host: 192.168.1.4 # private ip of the server
+      ansible_ssh_private_key_file: ./server.pem # private key to connect to the server
+      ansible_user: ubuntu

@@ -1,0 +1,7 @@
+---
+- hosts: all
+  become: true
+  roles:
+    - role: geerlingguy.docker # Install with `ansible-galaxy role install geerlingguy.docker`
+      vars:
+        docker_users: ubuntu
